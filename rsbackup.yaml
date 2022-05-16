@@ -1,0 +1,13 @@
+- name: Test
+  description: A backup configuration for tests
+  source: ./backup
+  target: ./tmp
+  excludes:
+  - __pycache__/
+- name: "Another test"
+  source: /home
+  target: /mnt/backups/homes
+  excludes:
+  - dummy
+  - foo
+  - .cache
