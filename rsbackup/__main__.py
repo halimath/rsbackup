@@ -28,11 +28,17 @@ def main(args):
 
     cfg = config.load_file(args.config_file)
 
-    match args.command:
-        case 'list' | 'ls':
-            return list(cfg)
-        case 'create' | 'c':
-            return create(cfg, args.config[0], dry_mode=args.dry_run, link_latest=args.link_latest)
+    if args.command in ('list', 'ls'):
+        return list(cfg)
+
+    if args.command in ('create', 'c'):
+        return create(cfg, args.config[0], dry_mode=args.dry_run, link_latest=args.link_latest)
+
+    # match args.command:
+    #     case 'list' | 'ls':
+    #         return list(cfg)
+    #     case 'create' | 'c':
+    #         return create(cfg, args.config[0], dry_mode=args.dry_run, link_latest=args.link_latest)
 
 def banner():
     print(f"rsbackup v{VERSION_STRING}")
