@@ -29,7 +29,7 @@ def test_acceptance_create():
 
 class AcceptanceTestFixture:
     def __init__(self):
-        self._dir = tempfile.TemporaryDirectory(prefix='backup_test_', ignore_cleanup_errors=True)
+        self._dir = tempfile.TemporaryDirectory(prefix='backup_test_')
         self.dir_name = self._dir.name
         self.config_file = os.path.join(self.dir_name, 'backup.yml')
 
