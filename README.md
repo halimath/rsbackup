@@ -7,31 +7,42 @@ incremental backups.
 
 # Installation
 
-TBD
+```shell
+pip install rsbackup
+```
 
 # Usage
 
-`rsbackup` reads backup configurations from a configuration yaml file. The default filename to read is
-`$HOME/.config/rsbackup.yaml` but you can specify a different file using the `-c` cli switch.
+`rsbackup` reads backup configurations from a configuration [TOML](https://toml.io/en/) file. The default 
+filename to read is `$HOME/.config/rsbackup.toml` but you can specify a different file using the `-c` cli 
+switch.
 
 The config file contains multiple backup configurations. It looks something like this
 
-```yaml
-- name: projects
-  description: All dev projects
-  source: /home/user/projects
-  target: /mnt/backup
-  excludes:
-  - __pycache__/
+```toml
+[projects]
+description = 'All dev projects'
+source = '/home/user/projects'
+target = '/mnt/backup'
+excludes = [
+  '__pycache__/',
+]
 ```
 
-* `name` defines a name for the configuration. This is used as a command line argument to create a backup so
-  pick something that needs no shell escaping
-* `description` contains an optional description.
-* `source` lists the source directory to create a backup of
-* `target` contains a target directory which will eventualy contain multiple backups
-* `excludes` lists patterns to be excluded from the backup. See `man rsync` for a description of the pattern
-  format.
+See [`rsbackup.toml`](./rsbackup.toml) for a documented example.
+
+Each TOML `table` (i.e. each section header) defines a single backup configuration. The header contains
+the config's name. This is used as a command line argument to create a backup so pick something that needs no
+shell escaping.
+
+Each table contains the following keys:
+
+Key | Type | Optional | Description
+-- | -- | -- | --
+`description` | string | yes | contains an optional description.
+`source` | string | no | lists the source directory to create a backup of
+`target` | string | no | contains a target directory which will eventualy contain multiple backups
+`excludes` | array of strings | yes | lists patterns to be excluded from the backup. See the `rsync` documentation for a description of the pattern format.
 
 You can use
 
@@ -47,6 +58,29 @@ To create a backup, run
 rsbackup create <name of the config>
 ```
 
+This will create a new directory named after the timestamp (in seconds) inside the target to contain the
+backup. 
+
+If you run `rsbackup create` with the testconfiguration provided in [`rsbackup.toml`](./rsbackup.toml) you
+will get the following backup under `tmp`:
+
+```
+tmp
+├── 2022-05-19_15-08-25
+│   └── rsbackup
+│       ├── config.py
+│       ├── config_test.py
+│       ├── __init__.py
+│       ├── __main__.py
+│       ├── rsbackup_test.py
+│       ├── rsync.py
+│       └── rsync_test.py
+└── _latest -> /home/alex/Development/python/backup/tmp/2022-05-19_15-08-25
+```
+
+Of course, the name of the backup directory will depend on the local time you execute the backup. Notice that
+no `__pycache__` directory is contained in the backup as it is excluded. 
+
 `rsbackup` provides the following command line options
 
 Option | Default Value | Description
@@ -57,6 +91,13 @@ Option | Default Value | Description
 `--no-link-latest` | - | skip linking unchanged files to latest copy (if exists)
 
 # Development
+
+You need Python >= 3.9 to run and thus develop. `tomli` is used to load TOML files. `pytest` is used to 
+execute unit and acceptance tests. `setuptools` is used as a [PEP517](https://peps.python.org/pep-0517/)
+build backend. 
+
+`requirements.txt` only contains the minimal set of dependencies to install the application, so it only 
+contains `tomli`.
 
 # License
 
