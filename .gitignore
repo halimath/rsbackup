@@ -1,4 +1,7 @@
 __pycache__
 tmp
-.ve
+.*ve
 .pytest_cache
+build
+*.egg-info
+*.whl
