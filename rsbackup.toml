@@ -1,0 +1,15 @@
+# Each TOML table defines a single backup configuration 
+[test]
+# description contains an (optional) description for humans
+description = 'A backup configuration for tests'
+# source defines the source directory to create backups for. Relative paths resolve to the directory from 
+# which rsbackup is run.
+source = './rsbackup'
+# target defines the directory to write the backup to. Relative paths resolve to the directory from 
+# which rsbackup is run. 
+target = './tmp'
+# excludes lists the path patterns to exclude from the backup. These are interpreted directly by rsync so
+# please refer to the rsync documentation on how these patterns are used.
+excludes = [
+    '__pycache__/',
+]

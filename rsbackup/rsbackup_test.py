@@ -44,12 +44,12 @@ class AcceptanceTestFixture:
     def __enter__(self):
         with open(self.config_file, mode='w') as f:
             print(f"""
----
-- name: test
-  source: {os.path.join(self.dir_name, 'src')}
-  target: {os.path.join(self.dir_name, 'bak')}
-  excludes:
-    - foo
+[test]
+source = '{os.path.join(self.dir_name, 'src')}'
+target = '{os.path.join(self.dir_name, 'bak')}'
+excludes = [
+    'foo',
+]
             """, file=f)
 
         os.makedirs(os.path.join(self.dir_name, 'src'))

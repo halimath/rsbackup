@@ -1,23 +1,26 @@
-from rsbackup.config import load, BackupConfig, BackupConfigEntry
+from rsbackup.config import loads, BackupConfigEntry
 
 def test_load ():
     input = """
-- name: Test
-  description: A backup configuration for tests
-  source: ./backup
-  target: ./tmp
-  excludes:
-  - __pycache__
-- name: "Another test"
-  source: /home
-  target: /mnt/backups/homes
-  excludes:
-  - dummy
-  - foo
-  - .cache    
+[test]
+description = 'A backup configuration for tests'
+source = '/spam/eggs/backup'
+target = '/spam/eggs/tmp'
+excludes = [
+    '__pycache__/',
+]
+
+[another_test]
+source = '/home'
+target = '/mnt/backups/homes'
+excludes = [
+    'dummy',
+    'foo',
+    '.cache',
+]
     """
-    c = load(input, '/spam/eggs')
+    c = loads(input, '/spam/eggs')
     assert 2 == len(c)
-    assert BackupConfigEntry('Test', 'A backup configuration for tests', '/spam/eggs/backup', '/spam/eggs/tmp', ['__pycache__']) == c['Test']
-    assert BackupConfigEntry('Another test', None, '/home', '/mnt/backups/homes', ['dummy', 'foo', '.cache']) == c['Another test']
+    assert BackupConfigEntry('test', 'A backup configuration for tests', '/spam/eggs/backup', '/spam/eggs/tmp', ['__pycache__/']) == c['test']
+    assert BackupConfigEntry('another_test', None, '/home', '/mnt/backups/homes', ['dummy', 'foo', '.cache']) == c['another_test']
     
