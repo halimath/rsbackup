@@ -1,5 +1,8 @@
 # rsbackup
 
+![CI Status][ci-img-url] 
+[![Releases][release-img-url]][release-url]
+
 A simple rsync-based backup solution for unix systems.
 
 `rsbackup` is a simple python application that uses `rsync` to create backups with support for hard links on
@@ -114,3 +117,7 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+[ci-img-url]: https://github.com/halimath/rsbackup/workflows/CI/badge.svg
+[release-img-url]: https://img.shields.io/github/v/release/halimath/rsbackup.svg
+[release-url]: https://github.com/halimath/rsbackup/releases
