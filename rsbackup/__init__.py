@@ -6,7 +6,7 @@ import sys
 from rsbackup.config import BackupConfigEntry, load_file
 from rsbackup.rsync import RSync
 
-__version__ = '0.1.0'
+__version__ = '0.1.2'
 __author__ = 'Alexander Metzner'
 
 _LATEST = '_latest'
