@@ -7,6 +7,7 @@ import sys
 
 from rsbackup.__main__ import main
 
+
 def test_acceptance_list():
     with AcceptanceTestFixture() as fixture:
         out = fixture.run('list')
@@ -20,11 +21,13 @@ test
     - foo
 """
 
+
 def test_acceptance_create():
     with AcceptanceTestFixture() as fixture:
         fixture.create_src_file('spam', 'Spam and eggs')
         print(fixture.run('create', 'test'))
-        assert 'Spam and eggs' == fixture.read_backup_file('_latest', 'src', 'spam')
+        assert 'Spam and eggs' == fixture.read_backup_file('_latest', 'src',
+                                                           'spam')
 
 
 class AcceptanceTestFixture:
@@ -62,7 +65,7 @@ excludes = [
             copy = self.dir_name + '.keep'
             print(f"Copying temporary directory to {copy}")
             shutil.copytree(self.dir_name, copy)
-        
+
         self._dir.cleanup()
 
     def run(self, *args):
@@ -71,14 +74,14 @@ excludes = [
             main(['-c', self.config_file] + [a for a in args])
         return collector.out
 
-       
+
 class FDCollector:
     def __init__(self, file='stdout'):
         self._file = file
 
     def __enter__(self):
         self._buffer = io.StringIO()
-        
+
         self._old = getattr(sys, self._file)
         setattr(sys, self._file, self._buffer)
 

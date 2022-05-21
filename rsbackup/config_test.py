@@ -1,6 +1,7 @@
 from rsbackup.config import loads, BackupConfigEntry
 
-def test_load ():
+
+def test_load():
     input = """
 [test]
 description = 'A backup configuration for tests'
@@ -21,6 +22,13 @@ excludes = [
     """
     c = loads(input, '/spam/eggs')
     assert 2 == len(c)
-    assert BackupConfigEntry('test', 'A backup configuration for tests', '/spam/eggs/backup', '/spam/eggs/tmp', ['__pycache__/']) == c['test']
-    assert BackupConfigEntry('another_test', None, '/home', '/mnt/backups/homes', ['dummy', 'foo', '.cache']) == c['another_test']
-    
+    assert BackupConfigEntry('test',
+                             'A backup configuration for tests',
+                             '/spam/eggs/backup',
+                             '/spam/eggs/tmp',
+                             ['__pycache__/']) == c['test']
+    assert BackupConfigEntry('another_test',
+                             None,
+                             '/home',
+                             '/mnt/backups/homes',
+                             ['dummy', 'foo', '.cache']) == c['another_test']

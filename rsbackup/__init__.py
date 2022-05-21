@@ -11,19 +11,25 @@ __author__ = 'Alexander Metzner'
 
 _LATEST = '_latest'
 
-def create_backup(cfg: BackupConfigEntry, out=sys.stdout, dry_mode=False, link_latest=True):
-    """
-    create_backup executes the backup process for the given configuration cfg. It logs output to out.
-    
-    If dry_mode is set to True, no file system operations will be executed and corresponding shell commands
-    will be printed to out. Note that these commands only demonstrates what would be done. Only rsync will
-    be executed directly. All other operations will be done using python library calls.
 
-    If link_latest is set to False, no _latest symlink will be used to create hard links for unchanged files
-    and the link will not be updated after the operation.
+def create_backup(cfg: BackupConfigEntry, out=sys.stdout,
+                  dry_mode=False, link_latest=True):
+    """
+    create_backup executes the backup process for the given configuration cfg.
+    It logs output to out.
+
+    If dry_mode is set to True, no file system operations will be executed and
+    corresponding shell commands will be printed to out. Note that these
+    commands only demonstrates what would be done. Only rsync will be executed
+    directly. All other operations will be done using python library calls.
+
+    If link_latest is set to False, no _latest symlink will be used to create
+    hard links for unchanged files and the link will not be updated after the
+    operation.
     """
     start = datetime.datetime.now()
-    target = os.path.join(cfg.target, start.isoformat(sep='_', timespec='seconds').replace(':', '-'))
+    target = os.path.join(cfg.target, start.isoformat(
+        sep='_', timespec='seconds').replace(':', '-'))
     latest = os.path.join(cfg.target, _LATEST)
     log_file = os.path.join(target, '.log')
 
@@ -34,7 +40,9 @@ def create_backup(cfg: BackupConfigEntry, out=sys.stdout, dry_mode=False, link_l
 
     if link_latest and os.path.exists(latest):
         prev = os.readlink(latest)
-        print(f"Linking unchanged files to {prev} (pointed to by {latest})", file=out)
+        print(
+            f"Linking unchanged files to {prev} (pointed to by {latest})",
+            file=out)
 
     rs = RSync(cfg.source, target, excludes=cfg.excludes, link_dest=prev)
 
@@ -51,10 +59,10 @@ def create_backup(cfg: BackupConfigEntry, out=sys.stdout, dry_mode=False, link_l
         with open(log_file, mode='w') as f:
             print(' '.join(rs.command), file=f)
             rs.run(log=f)
-                
+
         if os.path.exists(latest):
             os.remove(latest)
-        
+
         os.symlink(target, latest)
 
     end = datetime.datetime.now()
@@ -65,20 +73,36 @@ def create_backup(cfg: BackupConfigEntry, out=sys.stdout, dry_mode=False, link_l
 
 def main(args=None):
     """
-    main defines the applications CLI entry point. It reads args or sys.argv, loads the configuration and
-    dispatches to one of the sub-command handler functions defined below.
+    main defines the applications CLI entry point. It reads args or sys.argv,
+    loads the configuration and dispatches to one of the sub-command handler
+    functions defined below.
     """
     argparser = argparse.ArgumentParser(description='Simple rsync backup')
-    argparser.add_argument('-c', '--config-file', dest='config_file', default=os.path.join(os.getenv('HOME'), '.config', 'rsbackup.toml'), help='Path of the config file')
+    argparser.add_argument('-c', '--config-file', dest='config_file',
+                           default=os.path.join(
+                               os.getenv('HOME'), '.config', 'rsbackup.toml'),
+                           help='Path of the config file')
 
     subparsers = argparser.add_subparsers(dest='command')
 
-    subparsers.add_parser('list', aliases=('ls',), help='list available configs')
-    
-    create_initial_parser = subparsers.add_parser('create', aliases=('c',), help='create a backup for a configuration')
-    create_initial_parser.add_argument('-m', '--dry-run', dest='dry_run', action='store_true', default=False, help='enable dry run; do not touch any files but output commands instead')
-    create_initial_parser.add_argument('--no-link-latest', dest='link_latest', action='store_false', default=True, help='skip linking unchanged files to latest copy (if exists)')
-    create_initial_parser.add_argument('config', metavar='CONFIG', type=str, nargs=1, help='name of the config to run')    
+    subparsers.add_parser('list', aliases=(
+        'ls',), help='list available configs')
+
+    create_initial_parser = subparsers.add_parser(
+        'create', aliases=('c',), help='create a backup for a configuration')
+    create_initial_parser.add_argument(
+        '-m', '--dry-run', dest='dry_run',
+        action='store_true', default=False,
+        help='enable dry run; do not touch any files but output commands'
+    )
+    create_initial_parser.add_argument(
+        '--no-link-latest', dest='link_latest',
+        action='store_false', default=True,
+        help='skip linking unchanged files to latest copy (if exists)'
+    )
+    create_initial_parser.add_argument(
+        'config', metavar='CONFIG', type=str, nargs=1,
+        help='name of the config to run')
 
     args = argparser.parse_args(args)
 
@@ -90,13 +114,9 @@ def main(args=None):
         return _list_configs(cfgs)
 
     if args.command in ('create', 'c'):
-        return _create_backup(cfgs, args.config[0], dry_mode=args.dry_run, link_latest=args.link_latest)
+        return _create_backup(cfgs, args.config[0], dry_mode=args.dry_run,
+                              link_latest=args.link_latest)
 
-    # match args.command:
-    #     case 'list' | 'ls':
-    #         return list(cfg)
-    #     case 'create' | 'c':
-    #         return create(cfg, args.config[0], dry_mode=args.dry_run, link_latest=args.link_latest)
 
 def _banner():
     "Shows an application banner to the user."
@@ -105,16 +125,21 @@ def _banner():
     print('https://github.com/halimath/rsbackup')
     print()
 
+
 def _create_backup(cfgs, config_name, dry_mode, link_latest):
     "Creates a backup for the configuration named config_name."
-    
+
     c = cfgs[config_name]
     if not c:
-        print(f"{sys.argv[0]}: No backup configuration found: {config_name}", file=sys.stderr)
+        print(
+            f"{sys.argv[0]}: No backup configuration found: {config_name}",
+            file=sys.stderr)
         return 1
 
-    create_backup(c, dry_mode=dry_mode, out=sys.stdout, link_latest=link_latest)
+    create_backup(c, dry_mode=dry_mode, out=sys.stdout,
+                  link_latest=link_latest)
     return 0
+
 
 def _list_configs(cfgs):
     "Lists the available configs to the user."
@@ -125,4 +150,4 @@ def _list_configs(cfgs):
         print('  Excludes:')
         for e in c.excludes:
             print(f'    - {e}')
-    return 0    
+    return 0
