@@ -31,5 +31,5 @@ jobs:
       - name: Run tests
         run: pytest
       
-      - name: Build wheel
-        run: pip wheel .
+      - name: Build dist
+        run: python -m build
