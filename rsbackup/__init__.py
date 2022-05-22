@@ -1,3 +1,5 @@
+
+
 import argparse
 import datetime
 import os
@@ -14,7 +16,8 @@ _LATEST = '_latest'
 
 def create_backup(cfg: BackupConfigEntry, out=sys.stdout,
                   dry_mode=False, link_latest=True):
-    """
+    """Creates a backup for the given configuration.
+
     create_backup executes the backup process for the given configuration cfg.
     It logs output to out.
 
@@ -72,7 +75,8 @@ def create_backup(cfg: BackupConfigEntry, out=sys.stdout,
 
 
 def main(args=None):
-    """
+    """The main entry point for running rsbackup from the command line.
+    
     main defines the applications CLI entry point. It reads args or sys.argv,
     loads the configuration and dispatches to one of the sub-command handler
     functions defined below.
