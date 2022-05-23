@@ -1,12 +1,19 @@
+"""rsbackup is a python module which wraps the `rsync` command to create 
+file system backups on unix systems that feature
 
+1. multiple generations
+1. hardlinks to save disk space for unchanged files
 
-import argparse
+rsbackup is primary designed for being run from the command line but it can
+also be incorporated into other applications by using the functionality 
+exported from this module.
+"""
+
 import datetime
 import os
+import shutil
+import subprocess
 import sys
-
-from rsbackup.config import BackupConfigEntry, load_file
-from rsbackup.rsync import RSync
 
 __version__ = '0.1.2'
 __author__ = 'Alexander Metzner'
@@ -14,144 +21,166 @@ __author__ = 'Alexander Metzner'
 _LATEST = '_latest'
 
 
-def create_backup(cfg: BackupConfigEntry, out=sys.stdout,
-                  dry_mode=False, link_latest=True):
-    """Creates a backup for the given configuration.
+class Backup:
+    """A class that represents a single backup definition.
 
-    create_backup executes the backup process for the given configuration cfg.
-    It logs output to out.
-
-    If dry_mode is set to True, no file system operations will be executed and
-    corresponding shell commands will be printed to out. Note that these
-    commands only demonstrates what would be done. Only rsync will be executed
-    directly. All other operations will be done using python library calls.
-
-    If link_latest is set to False, no _latest symlink will be used to create
-    hard links for unchanged files and the link will not be updated after the
-    operation.
+    A Backup can be exectued which will produce a new backup generation. 
     """
-    start = datetime.datetime.now()
-    target = os.path.join(cfg.target, start.isoformat(
-        sep='_', timespec='seconds').replace(':', '-'))
-    latest = os.path.join(cfg.target, _LATEST)
-    log_file = os.path.join(target, '.log')
 
-    print(f"Starting initial backup of '{cfg.name}' at '{start}'", file=out)
-    print(f"Writing log to {log_file}", file=out)
+    def __init__(self, source, target, description=None, excludes=None):
+        """Initializes the Backup instance to use.
+        
+        `source` is the source path to create a backup from.
 
-    prev = None
+        `target` is the target path containing the backup generations.
 
-    if link_latest and os.path.exists(latest):
-        prev = os.readlink(latest)
+        `description` is an optional human readable description.
+
+        `excludes` is an optional list of exclude patterns as defined by
+        rsync.
+        """
+        self.source = source
+        self.target = target
+        self.description = description
+        self.excludes = excludes or []
+
+    def __eq__(self, other):
+        return self.source == other.source and\
+            self.target == other.target and\
+                self.description == other.description and\
+                    self.excludes == other.excludes
+
+    def run(self, out=sys.stdout, dry_mode=False, skip_latest=False):
+        """Creates a new generation for this backup.
+
+        Output is written to `out`.
+
+        If `dry_mode` is set to `True`, no file system operations will be
+        executed and corresponding shell commands will be printed to `out`.
+        Note that these commands only demonstrate what would be done. Only
+        rsync will be executed directly. All other operations will be carried
+        out using python library calls.
+
+        If `skip_latest` is set to `True`, no `_latest` symlink will be used
+        to create hard links for unchanged files and the link will not be
+        updated after the operation.
+        """
+        start = datetime.datetime.now()
+        target = os.path.join(self.target, start.isoformat(
+            sep='_', timespec='seconds').replace(':', '-'))
+        latest = os.path.join(self.target, _LATEST)
+        log_file = os.path.join(target, '.log')
+
         print(
-            f"Linking unchanged files to {prev} (pointed to by {latest})",
+            f"Creating new backup generation for '{self.source}' at '{start}'",
             file=out)
+        print(f"Saving log to {log_file}", file=out)
 
-    rs = RSync(cfg.source, target, excludes=cfg.excludes, link_dest=prev)
+        prev = None
 
-    if dry_mode:
-        print(file=out)
-        print(f"mkdir -p {target}", file=out)
-        print(' '.join(rs.command), file=out)
-        print(f"rm -f {latest}", file=out)
-        print(f"ln -s {target} {latest}", file=out)
-        print(file=out)
-    else:
-        os.makedirs(target)
+        if not skip_latest and os.path.exists(latest):
+            prev = os.readlink(latest)
+            print(
+                f"Linking unchanged files to {prev} (defined by {latest})",
+                file=out)
 
-        with open(log_file, mode='w') as f:
-            print(' '.join(rs.command), file=f)
-            rs.run(log=f)
+        rs = RSync(self.source, target, excludes=self.excludes, link_dest=prev)
 
-        if os.path.exists(latest):
-            os.remove(latest)
+        if dry_mode:
+            print('dry_mode is set to True; not going to touch any files.\n',
+                  file=out)
+            print(f"mkdir -p {target}", file=out)
+            print(' '.join(rs.command), file=out)
 
-        os.symlink(target, latest)
+            if not skip_latest:
+                print(f"rm -f {latest}", file=out)
+                print(f"ln -s {target} {latest}", file=out)
+                
+            print(file=out)
+        else:
+            os.makedirs(target)
 
-    end = datetime.datetime.now()
+            with open(log_file, mode='w') as f:
+                print(' '.join(rs.command), file=f)
+                rs.run(log=f)
 
-    print(f"Backup of '{cfg.name}' finished at '{start}'", file=out)
-    print(f"Took {end - start}", file=out)
+            if os.path.exists(latest):
+                os.remove(latest)
+
+            os.symlink(target, latest)
+
+        end = datetime.datetime.now()
+
+        print(f"Backup of '{self.source}' finished at '{start}'", file=out)
+        print(f"Took {end - start}", file=out)
 
 
-def main(args=None):
-    """The main entry point for running rsbackup from the command line.
-    
-    main defines the applications CLI entry point. It reads args or sys.argv,
-    loads the configuration and dispatches to one of the sub-command handler
-    functions defined below.
+class RSync:
+    """A class to execute rsync as a subprocess. The constructor provides 
+    keyword args to set different options which are passed to rsync as command
+    line args.
+
+    `source` defines the source file or directory.
+
+    `target` defines the target directory.
+
+    If `archive` is set to True (the default) rsync is run in archive mode.
+
+    If `verbose` is set to True (the default) rsync will output additional log.
+
+    If `delete` is set to `True` (the default) rsync will be invoked with 
+    `--delete`.
+
+    If `link_dest` is not `None` it must be string value which points to a
+    directory which is passed to rsync as `--link-dest`. See the documentation
+    for rsync for an explanation of `--link-dest`.
+
+    If `excludes` is not `None` it must be an iterable of strings each being
+    given to rsync as `--exclude`. See the rsync documentation for an
+    explanation of `--exclude` including a formal definition of the pattern
+    syntax supported by exclude.
+
+    If `binary` is not `None` it will be used as the binary to execute rsync,
+    i.e. `/usr/bin/rsync`. If `None`, binary will be determined from the `PATH`
+    environment variable.
     """
-    argparser = argparse.ArgumentParser(description='Simple rsync backup')
-    argparser.add_argument('-c', '--config-file', dest='config_file',
-                           default=os.path.join(
-                               os.getenv('HOME'), '.config', 'rsbackup.toml'),
-                           help='Path of the config file')
 
-    subparsers = argparser.add_subparsers(dest='command')
+    def __init__(self, source, target, archive=True, verbose=True, delete=True,
+                 link_dest=None, excludes=None, binary=None):
+        self.source = source
+        self.target = target
+        self.archive = archive
+        self.verbose = verbose
+        self.delete = delete
+        self.link_dest = link_dest
+        self.excludes = excludes
+        self.binary = binary or shutil.which('rsync')
 
-    subparsers.add_parser('list', aliases=(
-        'ls',), help='list available configs')
+    def run(self, log=None):
+        if not log:
+            log = subprocess.DEVNULL
+        subprocess.run(self.command, stdin=subprocess.DEVNULL,
+                       stdout=log, stderr=log)
 
-    create_initial_parser = subparsers.add_parser(
-        'create', aliases=('c',), help='create a backup for a configuration')
-    create_initial_parser.add_argument(
-        '-m', '--dry-run', dest='dry_run',
-        action='store_true', default=False,
-        help='enable dry run; do not touch any files but output commands'
-    )
-    create_initial_parser.add_argument(
-        '--no-link-latest', dest='link_latest',
-        action='store_false', default=True,
-        help='skip linking unchanged files to latest copy (if exists)'
-    )
-    create_initial_parser.add_argument(
-        'config', metavar='CONFIG', type=str, nargs=1,
-        help='name of the config to run')
+    def _args(self):
+        args = []
+        if self.archive:
+            args.append('-a')
+        if self.verbose:
+            args.append('-v')
+        if self.delete:
+            args.append('--delete')
+        args.append(self.source)
+        if self.link_dest:
+            args.append('--link-dest')
+            args.append(self.link_dest)
+        if self.excludes:
+            for exclude in self.excludes:
+                args.append(f"--exclude={exclude}")
+        args.append(self.target)
 
-    args = argparser.parse_args(args)
+        return args
 
-    _banner()
-
-    cfgs = load_file(args.config_file)
-
-    if args.command in ('list', 'ls'):
-        return _list_configs(cfgs)
-
-    if args.command in ('create', 'c'):
-        return _create_backup(cfgs, args.config[0], dry_mode=args.dry_run,
-                              link_latest=args.link_latest)
-
-
-def _banner():
-    "Shows an application banner to the user."
-
-    print(f"rsbackup v{__version__}")
-    print('https://github.com/halimath/rsbackup')
-    print()
-
-
-def _create_backup(cfgs, config_name, dry_mode, link_latest):
-    "Creates a backup for the configuration named config_name."
-
-    c = cfgs[config_name]
-    if not c:
-        print(
-            f"{sys.argv[0]}: No backup configuration found: {config_name}",
-            file=sys.stderr)
-        return 1
-
-    create_backup(c, dry_mode=dry_mode, out=sys.stdout,
-                  link_latest=link_latest)
-    return 0
-
-
-def _list_configs(cfgs):
-    "Lists the available configs to the user."
-    for c in cfgs.values():
-        print(f'{c.name}{f" - {c.description}" if c.description else ""}')
-        print(f'  Source: {c.source}')
-        print(f'  Target: {c.target}')
-        print('  Excludes:')
-        for e in c.excludes:
-            print(f'    - {e}')
-    return 0
+    @property
+    def command(self):
+        return [self.binary] + self._args()
