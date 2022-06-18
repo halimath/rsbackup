@@ -11,14 +11,37 @@ exported from this module.
 
 import datetime
 import os
+import re
 import shutil
-import subprocess
+import asyncio
 import sys
+import typing
 
 __version__ = '0.1.2'
 __author__ = 'Alexander Metzner'
 
 _LATEST = '_latest'
+
+
+class LoggingProtocol(typing.Protocol):
+    """
+    A typing definition for objects that can handle logging output for the
+    backup process.
+
+    `info` and `warn` will be called to report important events in the backup
+    procedure.
+
+    `notify` will be called to notify on specifics of the backup creation
+    (such as generated timestamps).
+
+    `progress` will be called to report overall progress.
+    """
+
+    def notify(self, s: str): ...
+
+    def info(self, s: str): ...
+    def warn(self, s: str): ...
+    def progress(self, bytes_sent: int, completion: float, eta: str): ...
 
 
 class Backup:
@@ -27,9 +50,10 @@ class Backup:
     A Backup can be exectued which will produce a new backup generation. 
     """
 
-    def __init__(self, source, target, description=None, excludes=None):
+    def __init__(self, source: str, target: str, description: str | None = None,
+                 excludes: typing.Iterable[str] | None = None):
         """Initializes the Backup instance to use.
-        
+
         `source` is the source path to create a backup from.
 
         `target` is the target path containing the backup generations.
@@ -42,15 +66,16 @@ class Backup:
         self.source = source
         self.target = target
         self.description = description
-        self.excludes = excludes or []
+        self.excludes = list(excludes or [])
 
     def __eq__(self, other):
         return self.source == other.source and\
             self.target == other.target and\
-                self.description == other.description and\
-                    self.excludes == other.excludes
+            self.description == other.description and\
+            self.excludes == other.excludes
 
-    def run(self, out=sys.stdout, dry_mode=False, skip_latest=False):
+    async def run(self, logger: LoggingProtocol | None = None,
+                  dry_mode: bool = False, skip_latest: bool = False):
         """Creates a new generation for this backup.
 
         Output is written to `out`.
@@ -71,38 +96,51 @@ class Backup:
         latest = os.path.join(self.target, _LATEST)
         log_file = os.path.join(target, '.log')
 
-        print(
-            f"Creating new backup generation for '{self.source}' at '{start}'",
-            file=out)
-        print(f"Saving log to {log_file}", file=out)
+        logger.info(f"Creating new backup generation for '{self.source}'")
+
+        logger.notify(f"Creating backup at {target}")
 
         prev = None
 
         if not skip_latest and os.path.exists(latest):
             prev = os.readlink(latest)
-            print(
-                f"Linking unchanged files to {prev} (defined by {latest})",
-                file=out)
+            logger.notify(
+                f"Found previous backup generation at {prev}")
+
+        def pcb(info):
+            logger.progress(info.bytes_sent,
+                            info.completion_rate, info.eta)
+        logger.progress(0, 0.0, '00:00:00')
 
         rs = RSync(self.source, target, excludes=self.excludes, link_dest=prev)
 
         if dry_mode:
-            print('dry_mode is set to True; not going to touch any files.\n',
-                  file=out)
-            print(f"mkdir -p {target}", file=out)
-            print(' '.join(rs.command), file=out)
+            logger.warn(
+                'dry_mode is set to True; not going to touch any files.')
+            logger.notify(f"mkdir -p {target}")
+            logger.notify(' '.join(rs.command))
+
+            rsync_exit_code = await rs.run(log=None, progress_callback=pcb,
+                                           dry_run=True)
+            if rsync_exit_code != 0:
+                raise ValueError(
+                    f"rsync returned unexpected exit code {rsync_exit_code}.")
 
             if not skip_latest:
-                print(f"rm -f {latest}", file=out)
-                print(f"ln -s {target} {latest}", file=out)
-                
-            print(file=out)
+                logger.notify(f"rm -f {latest}")
+                logger.notify(f"ln -s {target} {latest}")
         else:
             os.makedirs(target)
 
             with open(log_file, mode='w') as f:
-                print(' '.join(rs.command), file=f)
-                rs.run(log=f)
+                logger.notify(f"Starting rsync; writing output to {log_file}")
+
+                rsync_exit_code = await rs.run(log=f, progress_callback=pcb)
+                if rsync_exit_code != 0:
+                    raise ValueError(
+                        f"rsync returned unexpected exit code {rsync_exit_code}.")
+
+                logger.notify('rsync finished')
 
             if os.path.exists(latest):
                 os.remove(latest)
@@ -111,8 +149,36 @@ class Backup:
 
         end = datetime.datetime.now()
 
-        print(f"Backup of '{self.source}' finished at '{start}'", file=out)
-        print(f"Took {end - start}", file=out)
+        logger.success(f"Backup of '{self.source}' finished at '{start}'")
+        logger.info(f"Took {end - start}")
+
+
+class ProgressInfo(typing.NamedTuple):
+    """ProgressInfo reports about the progress of the backup opration.
+
+    `bytes_sent` names the total number of bytes sent to target.
+
+    `completion_rate` is a floating point number between 0 and 1 with 1 meaning
+    the rsync operation has completed.
+
+    `eta` contains a string formatted like `hh:mm:ss` reporting the estimated
+    time remaining to finish the rsync operation.    
+    """
+    bytes_sent: int
+    completion_rate: float
+    eta: str
+
+    @classmethod
+    def _from_progress_line(cls, l: str):
+        (bytes_sent_s, percent_s, _, eta_s, *_) = re.split(r'\s+', l.strip())
+        return cls(
+            bytes_sent=int(bytes_sent_s.replace(',', '')),
+            completion_rate=float(percent_s.replace('%', '')) / 100,
+            eta=eta_s
+        )
+
+
+ProgressCallback: typing.TypeAlias = typing.Callable[[ProgressInfo], None]
 
 
 class RSync:
@@ -145,8 +211,11 @@ class RSync:
     environment variable.
     """
 
-    def __init__(self, source, target, archive=True, verbose=True, delete=True,
-                 link_dest=None, excludes=None, binary=None):
+    def __init__(self, source: str, target: str, archive: bool = True,
+                 verbose: bool = True, delete: bool = True,
+                 link_dest: str = None,
+                 excludes: typing.Iterable[str] | None = None,
+                 binary: str | None = None):
         self.source = source
         self.target = target
         self.archive = archive
@@ -156,27 +225,78 @@ class RSync:
         self.excludes = excludes
         self.binary = binary or shutil.which('rsync')
 
-    def run(self, log=None):
-        if not log:
-            log = subprocess.DEVNULL
-        subprocess.run(self.command, stdin=subprocess.DEVNULL,
-                       stdout=log, stderr=log)
+    async def run(self,
+                  log=None,
+                  dry_run=False,
+                  progress_callback: ProgressCallback | None = None):
+        """
+        runs the configured rsync process asyncroniously.
 
-    def _args(self):
+        Returns a coroutine that when awaited produces rsync's exit code.
+
+        `log` can be an `write`able to write log output to. If `None` log is
+        silently discarded.
+
+        When `progress_callback` is given it must be a callable that accepts a
+        single parameter of type `ProgressInfo`. This callback will be called
+        multiple times to report the overall progress. See the documentation 
+        for `rsync` concerning `--info=progress2` for details on the technical
+        correctness of completion rate and ETA.
+        """
+
+        p = await asyncio.create_subprocess_exec(
+            self.binary,
+            *self._args(progress=progress_callback is not None,
+                        dry_run=dry_run),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            stdin=asyncio.subprocess.DEVNULL,
+            # limit=2**32,
+        )
+
+        while True:
+            data = await p.stdout.readuntil()
+            line = data.decode('ascii').rstrip()
+            if not line:
+                break
+
+            if line[0] == chr(13):
+                if progress_callback is not None:
+                    progress_callback(ProgressInfo._from_progress_line(line))
+            elif log is not None:
+                log.write(line + '\n')
+
+        return await p.wait()
+
+    def _args(self, progress=False, dry_run=False):
         args = []
+
         if self.archive:
-            args.append('-a')
+            args.append('--archive')
+
         if self.verbose:
-            args.append('-v')
+            args.append('--verbose')
+
         if self.delete:
             args.append('--delete')
+
+        if dry_run:
+            args.append('--dry-run')
+
+        if progress:
+            args.append('--no-i-r')
+            args.append('--info=progress2')
+
         args.append(self.source)
+
         if self.link_dest:
             args.append('--link-dest')
             args.append(self.link_dest)
+
         if self.excludes:
             for exclude in self.excludes:
                 args.append(f"--exclude={exclude}")
+
         args.append(self.target)
 
         return args

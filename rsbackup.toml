@@ -4,7 +4,8 @@
 description = 'A backup configuration for tests'
 # source defines the source directory to create backups for. Relative paths resolve to the directory from 
 # which rsbackup is run.
-source = './rsbackup'
+# source = './rsbackup'
+source = '/home/alex/go'
 # target defines the directory to write the backup to. Relative paths resolve to the directory from 
 # which rsbackup is run. 
 target = './tmp'
