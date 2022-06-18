@@ -50,8 +50,9 @@ class Backup:
     A Backup can be exectued which will produce a new backup generation. 
     """
 
-    def __init__(self, source: str, target: str, description: str | None = None,
-                 excludes: typing.Iterable[str] | None = None):
+    def __init__(self, source: str, target: str,
+                 description: typing.Optional[str] = None,
+                 excludes: typing.Optional[typing.Iterable[str]] = None):
         """Initializes the Backup instance to use.
 
         `source` is the source path to create a backup from.
@@ -74,7 +75,7 @@ class Backup:
             self.description == other.description and\
             self.excludes == other.excludes
 
-    async def run(self, logger: LoggingProtocol | None = None,
+    async def run(self, logger: typing.Optional[LoggingProtocol] = None,
                   dry_mode: bool = False, skip_latest: bool = False):
         """Creates a new generation for this backup.
 
@@ -214,8 +215,8 @@ class RSync:
     def __init__(self, source: str, target: str, archive: bool = True,
                  verbose: bool = True, delete: bool = True,
                  link_dest: str = None,
-                 excludes: typing.Iterable[str] | None = None,
-                 binary: str | None = None):
+                 excludes: typing.Optional[typing.Iterable[str]] = None,
+                 binary: typing.Optional[str] = None):
         self.source = source
         self.target = target
         self.archive = archive
