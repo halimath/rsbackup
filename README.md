@@ -1,7 +1,10 @@
 # rsbackup
 
-![CI Status][ci-img-url] 
-[![Releases][release-img-url]][release-url]
+[![CI Status](https://github.com/halimath/rsbackup/workflows/CI/badge.svg)](https://github.com/halimath/rsbackup/actions/workflows/ci.yaml)
+[![Releases](https://img.shields.io/github/v/release/halimath/rsbackup.svg)](https://github.com/halimath/rsbackup/releases)
+[![PyPi](https://img.shields.io/pypi/v/rsbackup.svg)](https://pypi.org/project/rsbackup/)
+[![Wheel](https://img.shields.io/pypi/wheel/rsbackup.svg)](https://pypi.org/project/rsbackup/)
+[![Python Versions](https://img.shields.io/pypi/pyversions/rsbackup.svg)](https://pypi.org/project/rsbackup/)
 
 A simple rsync-based backup solution for unix systems.
 
@@ -117,7 +120,3 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-
-[ci-img-url]: https://github.com/halimath/rsbackup/workflows/CI/badge.svg
-[release-img-url]: https://img.shields.io/github/v/release/halimath/rsbackup.svg
-[release-url]: https://github.com/halimath/rsbackup/releases
