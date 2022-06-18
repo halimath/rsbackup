@@ -9,12 +9,11 @@ also be incorporated into other applications by using the functionality
 exported from this module.
 """
 
+import asyncio
 import datetime
 import os
 import re
 import shutil
-import asyncio
-import sys
 import typing
 
 __version__ = '0.1.2'
@@ -179,7 +178,7 @@ class ProgressInfo(typing.NamedTuple):
         )
 
 
-ProgressCallback: typing.TypeAlias = typing.Callable[[ProgressInfo], None]
+ProgressCallback = typing.Callable[[ProgressInfo], None]
 
 
 class RSync:
