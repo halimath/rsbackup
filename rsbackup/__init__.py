@@ -228,7 +228,7 @@ class RSync:
     async def run(self,
                   log=None,
                   dry_run=False,
-                  progress_callback: ProgressCallback | None = None):
+                  progress_callback: typing.Optional[ProgressCallback] = None):
         """
         runs the configured rsync process asyncroniously.
 
