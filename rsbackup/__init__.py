@@ -251,6 +251,9 @@ class RSync:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             stdin=asyncio.subprocess.DEVNULL,
+            env={
+                'LC_NUMERIC': 'en.US',
+            }
             # limit=2**32,
         )
 
