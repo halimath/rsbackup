@@ -7,13 +7,14 @@ import sys
 
 from rsbackup import RSync
 
+from rsbackup import __version__
 from rsbackup.__main__ import main
 
 
 def test_acceptance_list():
     with AcceptanceTestFixture() as fixture:
         out = fixture.run('list')
-        assert out == f"""rsbackup v0.1.2
+        assert out == f"""rsbackup v{__version__}
 https://github.com/halimath/rsbackup
 
 test
