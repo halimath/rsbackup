@@ -5,102 +5,35 @@ import sys
 
 import tomli
 
-from rsbackup import Backup, __version__
-
-_start_marker = '\033['
-_end_marker = 'm'
-_separator = ';'
-_reset = '0'
-_bold = '1'
-_default = '22'
-_fg_black = '30'
-_bg_black = '40'
-_fg_red = '31'
-_bg_red = '41'
-_fg_green = '32'
-_bg_green = '42'
-_fg_yellow = '33'
-_bg_yellow = '43'
-_fg_blue = '34'
-_bg_blue = '44'
-_fg_magenta = '35'
-_bg_magenta = '45'
-_fg_cyan = '36'
-_bg_cyan = '46'
-_fg_white = '37'
-_bg_white = '47'
+from termapp.styles import BOLD, FG_CYAN
+from termapp.asyncio import AppProtocol, create_app
+from rsbackup import Backup, LoggingProtocol, __version__
 
 
-def _with_effect(s: str, *effects: str) -> str:
-    return _start_marker + _separator.join(effects) + _end_marker + \
-        s + _start_marker + _reset + _end_marker
+class AppLoggingProtocolAdapter(LoggingProtocol):
+    def __init__(self, app: AppProtocol):
+        self._app = app
 
+    async def details(self, s: str):
+        await self._app.details(s)
 
-class Output:
-    def __init__(self, sink=None, tty=None, tty_width=None):
-        self._sink = sink or sys.stdout
-        if tty is None and sink is sys.stdout:
-            self._tty = sys.stdout.isatty()
-            self._tty_width = tty_width or os.get_terminal_size()[0]
-        else:
-            self._tty = bool(tty)
-            self._tty_width = tty_width
+    async def info(self, s: str):
+        await self._app.info(s)
 
-        self._progress_written = False
+    async def success(self, s: str):
+        await self._app.success(s)
 
-    def print(self, s=None):
-        self._clear_progress()
+    async def warn(self, s: str):
+        await self._app.info(s)
 
-        if s is not None:
-            self._sink.write(s)
+    async def start_progress(self):
+        await self._app.start_progress(show_completion=True)
 
-        self._sink.write('\n')
-        self._progress_written = False
+    async def stop_progress(self):
+        await self._app.stop_progress()
 
-    def _print_with_effects(self, s, *effects):
-        if self._tty:
-            s = _with_effect(s, *effects)
-        self.print(s)
-
-    def notify(self, s: str):
-        self.print('\u2192\t' + s)
-
-    def info(self, s: str):
-        self._print_with_effects(s, _fg_white)
-
-    def warn(self, s: str):
-        self._print_with_effects(s, _fg_yellow)
-
-    def error(self, s):
-        self._print_with_effects(s, _fg_red)
-
-    def success(self, s):
-        self._print_with_effects(s, _fg_green)
-
-    def progress(self, bytes_sent: int, completion: float, eta: str):
-        if not self._tty:
-            self.print(
-                f"{bytes_sent / 1024}KB sent; {completion * 100}%; ETA {eta}")
-            return
-
-        self._clear_progress()
-
-        progress_bar_size = min(int(0.8 * self._tty_width) - 14, 100)
-        filled = int(completion * progress_bar_size)
-        non_filled = progress_bar_size - filled
-
-        self._sink.write(f" [{'=' * filled}{' ' * non_filled}] {eta}")
-
-        self._progress_written = True
-
-    def print_highlight(self, s):
-        self._print_with_effects(s, _bold)
-
-    def _clear_progress(self):
-        if self._tty and self._progress_written:
-            self._sink.write('\b' * self._tty_width)
-            self._sink.write(' ' * self._tty_width)
-            self._sink.write('\b' * self._tty_width)
+    async def update_progress(self, bytes_sent: int, completion: float, eta: str):
+        await self._app.update_progress(completion=completion, message=f"ETA {eta}")
 
 
 def main(args=None):
@@ -140,18 +73,22 @@ def main(args=None):
 
     args = argparser.parse_args(args)
 
-    output = Output()
-
-    _banner(output)
-
     cfgs = _load_config_file(args.config_file)
 
-    if args.command in ('list', 'ls'):
-        return _list_configs(cfgs, output)
+    app = create_app()
 
-    if args.command in ('create', 'c'):
-        return _create_backup(cfgs, args.config[0], dry_mode=args.dry_run,
-                              skip_latest=args.skip_latest, output=output)
+    async def _main():
+        await _banner(app)
+
+        if args.command in ('list', 'ls'):
+            return await _list_configs(cfgs, app)
+
+        if args.command in ('create', 'c'):
+            return await _create_backup(cfgs, args.config[0], dry_mode=args.dry_run,
+                                        skip_latest=args.skip_latest, app=app)
+
+    return asyncio.run(_main())
+    
 
 
 def _load_config(s, basedir='.'):
@@ -185,44 +122,55 @@ def _load_config_file(name):
         return _load_config(file.read(), basedir)
 
 
-def _banner(output: Output):
+async def _banner(app: AppProtocol):
     "Shows an application banner to the user."
 
-    output.print_highlight(f"rsbackup v{__version__}")
-    output.print('https://github.com/halimath/rsbackup')
-    output.print()
+    await app.write_line(f"rsbackup v{__version__}", BOLD)
+    await app.write_line('https://github.com/halimath/rsbackup')
+    await app.write_line()
 
 
-def _create_backup(cfgs, config_name, dry_mode, skip_latest, output: Output):
+async def _create_backup(cfgs, config_name, dry_mode, skip_latest, app: AppProtocol):
     "Creates a backup for the configuration named config_name."
 
     try:
         if config_name not in cfgs:
-            output.print_error(
+            await app.danger(
                 f"No backup configuration found: {config_name}\n")
             return 1
 
-        asyncio.run(cfgs[config_name].run(dry_mode=dry_mode,
-                    logger=output, skip_latest=skip_latest))
+        await cfgs[config_name].run(dry_mode=dry_mode,
+                    logger=AppLoggingProtocolAdapter(app), skip_latest=skip_latest)
         return 0
     except Exception as e:
-        output.error(f"Error: {e}")
+        await app.danger(f"Error: {e}")
         return 1
 
 
-def _list_configs(cfgs, output: Output):
+async def _list_configs(cfgs, app: AppProtocol):
     "Lists the available configs to the user."
 
     for name in cfgs.keys():
         c = cfgs[name]
-        output.print_highlight(name)
+        async with app.apply_styles(BOLD, FG_CYAN):
+            await app.write(name)
         if c.description:
-            output.print(f" - {c.description}")
-        output.print(f'  Source: {c.source}')
-        output.print(f'  Target: {c.target}')
-        output.print('  Excludes:')
+            await app.write(f" - {c.description}")
+
+        await app.write_line()
+        
+        await app.write('  Source: ')
+        async with app.apply_styles(FG_CYAN):
+            await app.write_line(c.source)
+
+        await app.write('  Target: ')
+        async with app.apply_styles(FG_CYAN):
+            await app.write_line(c.target)
+
+        await app.write_line('  Excludes:')
         for e in c.excludes:
-            output.print(f'    - {e}')
+            await app.write_line(f'    - {e}')
+        await app.write_line()
     return 0
 
 

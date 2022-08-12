@@ -22,6 +22,7 @@ test
   Target: {os.path.join(fixture.dir_name, 'bak')}
   Excludes:
     - foo
+
 """
 
 
@@ -35,9 +36,9 @@ def test_acceptance_create():
 
 class AcceptanceTestFixture:
     def __init__(self):
-        self._dir = tempfile.TemporaryDirectory(prefix='backup_test_')
+        self._dir = tempfile.TemporaryDirectory(prefix='rsbackup_test_')
         self.dir_name = self._dir.name
-        self.config_file = os.path.join(self.dir_name, 'backup.yml')
+        self.config_file = os.path.join(self.dir_name, 'rsbackup.toml')
 
     def create_src_file(self, name, content):
         with open(os.path.join(self.dir_name, 'src', name), mode='w') as f:

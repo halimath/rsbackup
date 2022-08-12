@@ -1,5 +1,5 @@
-from .__main__ import _load_config
-from . import Backup
+from rsbackup.__main__ import _load_config
+from rsbackup import Backup
 
 
 def test_load_config():

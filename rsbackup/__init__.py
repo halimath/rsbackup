@@ -16,6 +16,9 @@ import re
 import shutil
 import typing
 
+import aiofiles
+import aiofiles.os
+
 __version__ = '0.1.2'
 __author__ = 'Alexander Metzner'
 
@@ -27,20 +30,26 @@ class LoggingProtocol(typing.Protocol):
     A typing definition for objects that can handle logging output for the
     backup process.
 
-    `info` and `warn` will be called to report important events in the backup
+    ``info`` and ``warn`` will be called to report important events in the backup
     procedure.
 
-    `notify` will be called to notify on specifics of the backup creation
-    (such as generated timestamps).
+    ``details`` will be called to notify on additional details of the backup
+    creation (such as generated timestamps).
 
-    `progress` will be called to report overall progress.
+    ``start_progress``, ``stop_progress`` and ``update_progress`` will be 
+    called to signal start and stop of a progress monitoring as well as updates
+    of the current progress.    
     """
 
-    def notify(self, s: str): ...
+    async def details(self, s: str): ...
 
-    def info(self, s: str): ...
-    def warn(self, s: str): ...
-    def progress(self, bytes_sent: int, completion: float, eta: str): ...
+    async def info(self, s: str): ...
+    async def success(self, s: str): ...
+    async def warn(self, s: str): ...
+
+    async def start_progress(self): ...
+    async def stop_progress(self): ...
+    async def update_progress(self, bytes_sent: int, completion: float, eta: str): ...
 
 
 class Backup:
@@ -96,61 +105,68 @@ class Backup:
         latest = os.path.join(self.target, _LATEST)
         log_file = os.path.join(target, '.log')
 
-        logger.info(f"Creating new backup generation for '{self.source}'")
+        await logger.info(f"Creating new backup generation for '{self.source}'")
 
-        logger.notify(f"Creating backup at {target}")
+        await logger.details(f"Creating backup at {target}")
 
         prev = None
 
         if not skip_latest and os.path.exists(latest):
             prev = os.readlink(latest)
-            logger.notify(
+            await logger.info(
                 f"Found previous backup generation at {prev}")
 
-        def pcb(info):
-            logger.progress(info.bytes_sent,
+        async def pcb(info):
+            await logger.update_progress(info.bytes_sent,
                             info.completion_rate, info.eta)
-        logger.progress(0, 0.0, '00:00:00')
+        await logger.update_progress(0, 0.0, '00:00:00')
 
         rs = RSync(self.source, target, excludes=self.excludes, link_dest=prev)
 
         if dry_mode:
-            logger.warn(
+            await logger.warn(
                 'dry_mode is set to True; not going to touch any files.')
-            logger.notify(f"mkdir -p {target}")
-            logger.notify(' '.join(rs.command))
+            await logger.details(f"mkdir -p {target}")
+            await logger.details(' '.join(rs.command))
 
+            await logger.start_progress()
             rsync_exit_code = await rs.run(log=None, progress_callback=pcb,
                                            dry_run=True)
+            await logger.stop_progress()
+
             if rsync_exit_code != 0:
                 raise ValueError(
                     f"rsync returned unexpected exit code {rsync_exit_code}.")
 
             if not skip_latest:
-                logger.notify(f"rm -f {latest}")
-                logger.notify(f"ln -s {target} {latest}")
-        else:
-            os.makedirs(target)
+                await logger.details(f"rm -f {latest}")
+                await logger.details(f"ln -s {target} {latest}")
+        else:            
+            await aiofiles.os.makedirs(target)
 
-            with open(log_file, mode='w') as f:
-                logger.notify(f"Starting rsync; writing output to {log_file}")
+            async with aiofiles.open(log_file, mode='w') as f:
+                await logger.info('Starting rsync')
+                await logger.details(f"writing output to {log_file}")
 
+                await logger.start_progress()
                 rsync_exit_code = await rs.run(log=f, progress_callback=pcb)
+                await logger.stop_progress()
                 if rsync_exit_code != 0:
                     raise ValueError(
                         f"rsync returned unexpected exit code {rsync_exit_code}.")
 
-                logger.notify('rsync finished')
+                await logger.details('rsync finished')
 
-            if os.path.exists(latest):
-                os.remove(latest)
+            if await aiofiles.os.path.exists(latest):
+                await aiofiles.os.remove(latest)
 
+            # TODO: Make this asynchronous
             os.symlink(target, latest)
 
         end = datetime.datetime.now()
 
-        logger.success(f"Backup of '{self.source}' finished at '{start}'")
-        logger.info(f"Took {end - start}")
+        await logger.success(f"Backup of '{self.source}' finished at '{start}'")
+        await logger.details(f"Took {end - start}")
 
 
 class ProgressInfo(typing.NamedTuple):
@@ -265,9 +281,9 @@ class RSync:
 
             if line[0] == chr(13):
                 if progress_callback is not None:
-                    progress_callback(ProgressInfo._from_progress_line(line))
+                    await progress_callback(ProgressInfo._from_progress_line(line))
             elif log is not None:
-                log.write(line + '\n')
+                await log.write(line + '\n')
 
         return await p.wait()
 
