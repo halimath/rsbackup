@@ -19,7 +19,7 @@ import typing
 import aiofiles
 import aiofiles.os
 
-__version__ = '0.1.2'
+__version__ = '0.2.0'
 __author__ = 'Alexander Metzner'
 
 _LATEST = '_latest'
