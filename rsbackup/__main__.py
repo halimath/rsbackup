@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import os
+import platform
 import sys
 
 import tomli
@@ -36,6 +37,14 @@ class AppLoggingProtocolAdapter(LoggingProtocol):
         await self._app.update_progress(completion=completion, message=f"ETA {eta}")
 
 
+def config_file_path(file_name: str) -> str:
+    match platform.system():
+        case 'Darwin':
+            return os.path.join(os.getenv('HOME'), 'Library', 'Preferences', file_name)
+        case _:
+            return os.path.join(os.getenv('HOME'), '.config', file_name)
+
+
 def main(args=None):
     """The main entry point for running rsbackup from the command line.
 
@@ -45,8 +54,7 @@ def main(args=None):
     """
     argparser = argparse.ArgumentParser(description='Simple rsync backup')
     argparser.add_argument('-c', '--config-file', dest='config_file',
-                           default=os.path.join(
-                               os.getenv('HOME'), '.config', 'rsbackup.toml'),
+                           default=config_file_path('rsbackup.toml'),
                            help='Path of the config file')
 
     subparsers = argparser.add_subparsers(dest='command')
