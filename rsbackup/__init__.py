@@ -49,7 +49,6 @@ class LoggingProtocol(typing.Protocol):
 
     async def start_progress(self): ...
     async def stop_progress(self): ...
-    async def update_progress(self, bytes_sent: int, completion: float, eta: str): ...
 
 
 class Backup:
@@ -116,11 +115,6 @@ class Backup:
             await logger.info(
                 f"Found previous backup generation at {prev}")
 
-        async def pcb(info):
-            await logger.update_progress(info.bytes_sent,
-                            info.completion_rate, info.eta)
-        await logger.update_progress(0, 0.0, '00:00:00')
-
         rs = RSync(self.source, target, excludes=self.excludes, link_dest=prev)
 
         if dry_mode:
@@ -130,8 +124,7 @@ class Backup:
             await logger.details(' '.join(rs.command))
 
             await logger.start_progress()
-            rsync_exit_code = await rs.run(log=None, progress_callback=pcb,
-                                           dry_run=True)
+            rsync_exit_code = await rs.run(log=None, dry_run=True)
             await logger.stop_progress()
 
             if rsync_exit_code != 0:
@@ -149,7 +142,7 @@ class Backup:
                 await logger.details(f"writing output to {log_file}")
 
                 await logger.start_progress()
-                rsync_exit_code = await rs.run(log=f, progress_callback=pcb)
+                rsync_exit_code = await rs.run(log=f)
                 await logger.stop_progress()
                 if rsync_exit_code != 0:
                     raise ValueError(
@@ -167,34 +160,6 @@ class Backup:
 
         await logger.success(f"Backup of '{self.source}' finished at '{start}'")
         await logger.details(f"Took {end - start}")
-
-
-class ProgressInfo(typing.NamedTuple):
-    """ProgressInfo reports about the progress of the backup opration.
-
-    `bytes_sent` names the total number of bytes sent to target.
-
-    `completion_rate` is a floating point number between 0 and 1 with 1 meaning
-    the rsync operation has completed.
-
-    `eta` contains a string formatted like `hh:mm:ss` reporting the estimated
-    time remaining to finish the rsync operation.    
-    """
-    bytes_sent: int
-    completion_rate: float
-    eta: str
-
-    @classmethod
-    def _from_progress_line(cls, l: str):
-        (bytes_sent_s, percent_s, _, eta_s, *_) = re.split(r'\s+', l.strip())
-        return cls(
-            bytes_sent=int(bytes_sent_s.replace(',', '')),
-            completion_rate=float(percent_s.replace('%', '')) / 100,
-            eta=eta_s
-        )
-
-
-ProgressCallback = typing.Callable[[ProgressInfo], None]
 
 
 class RSync:
@@ -243,8 +208,7 @@ class RSync:
 
     async def run(self,
                   log=None,
-                  dry_run=False,
-                  progress_callback: typing.Optional[ProgressCallback] = None):
+                  dry_run=False):
         """
         runs the configured rsync process asyncroniously.
 
@@ -252,18 +216,11 @@ class RSync:
 
         `log` can be an `write`able to write log output to. If `None` log is
         silently discarded.
-
-        When `progress_callback` is given it must be a callable that accepts a
-        single parameter of type `ProgressInfo`. This callback will be called
-        multiple times to report the overall progress. See the documentation 
-        for `rsync` concerning `--info=progress2` for details on the technical
-        correctness of completion rate and ETA.
         """
 
         p = await asyncio.create_subprocess_exec(
             self.binary,
-            *self._args(progress=progress_callback is not None,
-                        dry_run=dry_run),
+            *self._args(dry_run=dry_run),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
             stdin=asyncio.subprocess.DEVNULL,
@@ -279,15 +236,11 @@ class RSync:
             if not line:
                 break
 
-            if line[0] == chr(13):
-                if progress_callback is not None:
-                    await progress_callback(ProgressInfo._from_progress_line(line))
-            elif log is not None:
-                await log.write(line + '\n')
+            await log.write(line + '\n')
 
         return await p.wait()
 
-    def _args(self, progress=False, dry_run=False):
+    def _args(self, dry_run=False):
         args = []
 
         if self.archive:
@@ -301,10 +254,6 @@ class RSync:
 
         if dry_run:
             args.append('--dry-run')
-
-        if progress:
-            args.append('--no-i-r')
-            args.append('--info=progress2')
 
         args.append(self.source)
 

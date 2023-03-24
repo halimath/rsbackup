@@ -28,13 +28,10 @@ class AppLoggingProtocolAdapter(LoggingProtocol):
         await self._app.info(s)
 
     async def start_progress(self):
-        await self._app.start_progress(show_completion=True)
+        await self._app.start_progress(show_completion=False)
 
     async def stop_progress(self):
         await self._app.stop_progress()
-
-    async def update_progress(self, bytes_sent: int, completion: float, eta: str):
-        await self._app.update_progress(completion=completion, message=f"ETA {eta}")
 
 
 def config_file_path(file_name: str) -> str:
