@@ -12,14 +12,13 @@ exported from this module.
 import asyncio
 import datetime
 import os
-import re
 import shutil
 import typing
 
 import aiofiles
 import aiofiles.os
 
-__version__ = '0.2.2'
+__version__ = '0.3.0'
 __author__ = 'Alexander Metzner'
 
 _LATEST = '_latest'
