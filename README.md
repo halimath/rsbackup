@@ -13,6 +13,11 @@ incremental backups.
 
 # Installation
 
+`rsbackup` requires a working installation of Python 3.10 and the `rsync` command line tool. `rsbackup` uses only `rsync` flags
+supported on both Linux and BSD versions (i.e. MacOS) of `rsync`.
+
+Use the following command to install `rsbackup`:
+
 ```shell
 pip install rsbackup
 ```
@@ -107,7 +112,7 @@ contains `tomli`.
 
 # License
 
-Copyright 2022 Alexander Metzner.
+Copyright 2022, 2023 Alexander Metzner.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

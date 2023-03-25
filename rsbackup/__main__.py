@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import os
+import platform
 import sys
 
 import tomli
@@ -27,13 +28,18 @@ class AppLoggingProtocolAdapter(LoggingProtocol):
         await self._app.info(s)
 
     async def start_progress(self):
-        await self._app.start_progress(show_completion=True)
+        await self._app.start_progress(show_completion=False)
 
     async def stop_progress(self):
         await self._app.stop_progress()
 
-    async def update_progress(self, bytes_sent: int, completion: float, eta: str):
-        await self._app.update_progress(completion=completion, message=f"ETA {eta}")
+
+def config_file_path(file_name: str) -> str:
+    match platform.system():
+        case 'Darwin':
+            return os.path.join(os.getenv('HOME'), 'Library', 'Preferences', file_name)
+        case _:
+            return os.path.join(os.getenv('HOME'), '.config', file_name)
 
 
 def main(args=None):
@@ -45,8 +51,7 @@ def main(args=None):
     """
     argparser = argparse.ArgumentParser(description='Simple rsync backup')
     argparser.add_argument('-c', '--config-file', dest='config_file',
-                           default=os.path.join(
-                               os.getenv('HOME'), '.config', 'rsbackup.toml'),
+                           default=config_file_path('rsbackup.toml'),
                            help='Path of the config file')
 
     subparsers = argparser.add_subparsers(dest='command')
