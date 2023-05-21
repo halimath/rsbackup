@@ -6,14 +6,14 @@ def test_load_config():
     input = """
 [test]
 description = 'A backup configuration for tests'
-source = '/spam/eggs/backup'
+sources = ['/spam/eggs/backup']
 target = '/spam/eggs/tmp'
 excludes = [
     '__pycache__/',
 ]
 
 [another_test]
-source = '/home'
+sources = ['/home']
 target = '/mnt/backups/homes'
 excludes = [
     'dummy',
@@ -25,11 +25,11 @@ excludes = [
     assert 2 == len(c)
     assert Backup(
         description='A backup configuration for tests',
-        source='/spam/eggs/backup',
+        sources=['/spam/eggs/backup'],
         target='/spam/eggs/tmp',
         excludes=['__pycache__/']) == c['test']
     assert Backup(
         description=None,
-        source='/home',
+        sources=['/home'],
         target='/mnt/backups/homes',
         excludes=['dummy', 'foo', '.cache']) == c['another_test']

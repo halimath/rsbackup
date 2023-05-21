@@ -105,10 +105,7 @@ def _load_config(s, basedir='.'):
     data = tomli.loads(s)
 
     return {key: Backup(
-        source=os.path.abspath(
-            os.path.normpath(data[key]['source'] if os.path.isabs(
-                data[key]['source']) else os.path.join(basedir,
-                                                       data[key]['source']))),
+        sources=[os.path.abspath(os.path.normpath(p)) if os.path.isabs(p) else os.path.join(basedir, p) for p in data[key]['sources']],
         target=os.path.abspath(
             os.path.normpath(data[key]['target'] if os.path.isabs(
                 data[key]['target']) else os.path.join(basedir,
@@ -164,13 +161,14 @@ async def _list_configs(cfgs, app: AppProtocol):
 
         await app.write_line()
         
-        await app.write('  Source: ')
+        await app.write_line('  Sources:')
         async with app.apply_styles(FG_CYAN):
-            await app.write_line(c.source)
+            for src in c.sources:
+                await app.write_line(f"    - {src}")
 
-        await app.write('  Target: ')
+        await app.write_line('  Target:')
         async with app.apply_styles(FG_CYAN):
-            await app.write_line(c.target)
+            await app.write_line(f"    {c.target}")
 
         await app.write_line('  Excludes:')
         for e in c.excludes:
