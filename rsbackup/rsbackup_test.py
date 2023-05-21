@@ -14,19 +14,22 @@ from rsbackup.__main__ import main
 def test_acceptance_list():
     with AcceptanceTestFixture() as fixture:
         out = fixture.run('list')
+
         assert out == f"""rsbackup v{__version__}
 https://github.com/halimath/rsbackup
 
 test
-  Source: {os.path.join(fixture.dir_name, 'src')}
-  Target: {os.path.join(fixture.dir_name, 'bak')}
+  Sources:
+    - {os.path.join(fixture.dir_name, 'src')}
+  Target:
+    {os.path.join(fixture.dir_name, 'bak')}
   Excludes:
     - foo
 
 """
 
 
-def test_acceptance_create():
+def test_acceptance_create_single_source():
     with AcceptanceTestFixture() as fixture:
         fixture.create_src_file('spam', 'Spam and eggs')
         print(fixture.run('create', 'test'))
@@ -34,11 +37,40 @@ def test_acceptance_create():
                                                            'spam')
 
 
+def test_acceptance_create_multiple_sources_with_excluded_source():
+    with AcceptanceTestFixture() as fixture:
+        fixture.create_src_file('spam', 'Spam and eggs')
+        fixture.create_src_file('foo', 'Foo and bar')
+        fixture.sources = [os.path.join(
+            'src', 'spam'), os.path.join('src', 'foo')]
+        fixture.write_config_file()
+
+        print(fixture.run('create', 'test'))
+        assert 'Spam and eggs' == fixture.read_backup_file('_latest', 'spam')
+        assert not fixture.backup_file_exists('_latest', 'foo')
+
+
+def test_acceptance_create_multiple_sources():
+    with AcceptanceTestFixture() as fixture:
+        fixture.create_src_file('spam', 'Spam and eggs')
+        fixture.create_src_file('foobar', 'Foo and bar')
+        fixture.sources = [os.path.join(
+            'src', 'spam'), os.path.join('src', 'foobar')]
+        fixture.write_config_file()
+
+        print(fixture.run('create', 'test'))
+        assert 'Spam and eggs' == fixture.read_backup_file(
+            '_latest', 'spam')
+        assert 'Foo and bar' == fixture.read_backup_file(
+            '_latest', 'foobar')
+
+
 class AcceptanceTestFixture:
     def __init__(self):
         self._dir = tempfile.TemporaryDirectory(prefix='rsbackup_test_')
         self.dir_name = self._dir.name
         self.config_file = os.path.join(self.dir_name, 'rsbackup.toml')
+        self.sources = ['src']
 
     def create_src_file(self, name, content):
         with open(os.path.join(self.dir_name, 'src', name), mode='w') as f:
@@ -48,21 +80,31 @@ class AcceptanceTestFixture:
         with open(os.path.join(self.dir_name, 'bak', *path), mode='r') as f:
             return f.read()
 
+    def backup_file_exists(self, *path):
+        try:
+            os.stat(os.path.join(self.dir_name, 'bak', *path))
+            return True
+        except:
+            return False
+
     def __enter__(self):
-        with open(self.config_file, mode='w') as f:
-            print(f"""
-[test]
-source = '{os.path.join(self.dir_name, 'src')}'
-target = '{os.path.join(self.dir_name, 'bak')}'
-excludes = [
-    'foo',
-]
-            """, file=f)
+        self.write_config_file()
 
         os.makedirs(os.path.join(self.dir_name, 'src'))
         os.makedirs(os.path.join(self.dir_name, 'bak'))
 
         return self
+
+    def write_config_file(self):
+        with open(self.config_file, mode='w') as f:
+            print(f"""
+[test]
+sources = ['{"', '".join(os.path.join(self.dir_name, src) for src in self.sources)}']
+target = '{os.path.join(self.dir_name, 'bak')}'
+excludes = [
+    'foo',
+]
+            """, file=f)
 
     def __exit__(self, error_type=None, value=None, traceback=None):
         if error_type:
@@ -98,7 +140,7 @@ class FDCollector:
 
 
 def test_cmd():
-    r = RSync('/home/alex', '.', link_dest='../2022-01-01',
+    r = RSync(('/home/alex',), '.', link_dest='../2022-01-01',
               excludes=['.cache', '.local'], binary='rsync')
     assert r.command == ['rsync', '--archive', '--verbose', '--delete', '/home/alex',
                          '--link-dest', '../2022-01-01', '--exclude=.cache',
@@ -106,5 +148,6 @@ def test_cmd():
 
 
 def test_cmd_no_link_dest_no_excludes():
-    r = RSync('/home/alex', '.', binary='rsync')
-    assert r.command == ['rsync', '--archive', '--verbose', '--delete', '/home/alex', '.']
+    r = RSync(('/home/alex',), '.', binary='rsync')
+    assert r.command == ['rsync', '--archive',
+                         '--verbose', '--delete', '/home/alex', '.']

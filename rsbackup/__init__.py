@@ -56,12 +56,12 @@ class Backup:
     A Backup can be exectued which will produce a new backup generation. 
     """
 
-    def __init__(self, source: str, target: str,
+    def __init__(self, sources: typing.Sequence[str], target: str,
                  description: typing.Optional[str] = None,
                  excludes: typing.Optional[typing.Iterable[str]] = None):
         """Initializes the Backup instance to use.
 
-        `source` is the source path to create a backup from.
+        `sources` is the sequence of source paths to create a backup from.
 
         `target` is the target path containing the backup generations.
 
@@ -70,13 +70,13 @@ class Backup:
         `excludes` is an optional list of exclude patterns as defined by
         rsync.
         """
-        self.source = source
+        self.sources = sources
         self.target = target
         self.description = description
         self.excludes = list(excludes or [])
 
     def __eq__(self, other):
-        return self.source == other.source and\
+        return self.sources == other.sources and\
             self.target == other.target and\
             self.description == other.description and\
             self.excludes == other.excludes
@@ -103,7 +103,7 @@ class Backup:
         latest = os.path.join(self.target, _LATEST)
         log_file = os.path.join(target, '.log')
 
-        await logger.info(f"Creating new backup generation for '{self.source}'")
+        await logger.info(f"Creating new backup generation for '{', '.join(self.sources)}'")
 
         await logger.details(f"Creating backup at {target}")
 
@@ -114,7 +114,7 @@ class Backup:
             await logger.info(
                 f"Found previous backup generation at {prev}")
 
-        rs = RSync(self.source, target, excludes=self.excludes, link_dest=prev)
+        rs = RSync(self.sources, target, excludes=self.excludes, link_dest=prev)
 
         if dry_mode:
             await logger.warn(
@@ -157,7 +157,7 @@ class Backup:
 
         end = datetime.datetime.now()
 
-        await logger.success(f"Backup of '{self.source}' finished at '{start}'")
+        await logger.success(f"Backup of {self.sources!r} finished at '{start}'")
         await logger.details(f"Took {end - start}")
 
 
@@ -166,7 +166,7 @@ class RSync:
     keyword args to set different options which are passed to rsync as command
     line args.
 
-    `source` defines the source file or directory.
+    `sources` defines the source files or directories.
 
     `target` defines the target directory.
 
@@ -191,12 +191,13 @@ class RSync:
     environment variable.
     """
 
-    def __init__(self, source: str, target: str, archive: bool = True,
+    def __init__(self, sources: typing.Sequence[str], target: str, 
+                 archive: bool = True,
                  verbose: bool = True, delete: bool = True,
                  link_dest: str = None,
                  excludes: typing.Optional[typing.Iterable[str]] = None,
                  binary: typing.Optional[str] = None):
-        self.source = source
+        self.sources = sources
         self.target = target
         self.archive = archive
         self.verbose = verbose
@@ -254,7 +255,7 @@ class RSync:
         if dry_run:
             args.append('--dry-run')
 
-        args.append(self.source)
+        args += self.sources
 
         if self.link_dest:
             args.append('--link-dest')
