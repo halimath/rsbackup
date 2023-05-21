@@ -51,7 +51,7 @@ Each table contains the following keys:
 Key | Type | Optional | Description
 -- | -- | -- | --
 `description` | string | yes | contains an optional description.
-`source` | string | no | lists the source directory to create a backup of
+`sources` | array of string | no | lists the source directories to create a backup of
 `target` | string | no | contains a target directory which will eventualy contain multiple backups
 `excludes` | array of strings | yes | lists patterns to be excluded from the backup. See the `rsync` documentation for a description of the pattern format.
 
